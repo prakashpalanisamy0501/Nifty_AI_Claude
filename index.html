@@ -1,0 +1,1252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Nifty50 AI Predictor</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@400;600;700&family=Exo+2:wght@300;400;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #050a14;
+    --panel: #080f1e;
+    --border: #0d2040;
+    --accent: #00d4ff;
+    --green: #00ff88;
+    --red: #ff3b6b;
+    --gold: #ffcc00;
+    --text: #b0c8e8;
+    --dim: #3a5070;
+    --glow: 0 0 20px rgba(0,212,255,0.3);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Exo 2', sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* GRID BACKGROUND */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(0,212,255,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,212,255,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .wrapper { position: relative; z-index: 1; }
+
+  /* HEADER */
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 28px;
+    border-bottom: 1px solid var(--border);
+    background: rgba(8,15,30,0.95);
+    backdrop-filter: blur(10px);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+  .logo {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 1.3rem;
+    color: var(--accent);
+    text-shadow: var(--glow);
+    letter-spacing: 2px;
+  }
+  .logo span { color: var(--gold); }
+  .market-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.85rem;
+    font-family: 'Share Tech Mono', monospace;
+  }
+  .status-dot {
+    width: 9px; height: 9px;
+    border-radius: 50%;
+    animation: pulse 1.5s infinite;
+  }
+  .status-dot.open { background: var(--green); box-shadow: 0 0 8px var(--green); }
+  .status-dot.closed { background: var(--red); box-shadow: 0 0 8px var(--red); }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+  .header-right { display: flex; align-items: center; gap: 20px; }
+  .nifty-live {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 1rem;
+  }
+  .nifty-live .val { color: #fff; font-size: 1.15rem; font-weight: 700; }
+  .nifty-live .chg { font-size: 0.8rem; margin-left: 6px; }
+  .chg.pos { color: var(--green); }
+  .chg.neg { color: var(--red); }
+
+  /* MAIN LAYOUT */
+  .main-grid {
+    display: grid;
+    grid-template-columns: 1fr 320px;
+    grid-template-rows: auto auto;
+    gap: 12px;
+    padding: 14px;
+    max-width: 1600px;
+    margin: 0 auto;
+  }
+
+  /* PANELS */
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+  }
+  .panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border);
+    background: rgba(0,212,255,0.04);
+  }
+  .panel-title {
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: var(--accent);
+  }
+  .panel-body { padding: 14px; }
+
+  /* CHART SECTION */
+  .chart-section { grid-column: 1; }
+  .chart-controls {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  .btn {
+    padding: 5px 14px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text);
+    border-radius: 4px;
+    cursor: pointer;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.78rem;
+    transition: all 0.2s;
+  }
+  .btn:hover, .btn.active {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: rgba(0,212,255,0.08);
+    box-shadow: 0 0 10px rgba(0,212,255,0.15);
+  }
+  .btn.predict-btn {
+    background: linear-gradient(135deg, #00d4ff22, #00ff8822);
+    border-color: var(--green);
+    color: var(--green);
+    font-weight: 700;
+    letter-spacing: 1px;
+  }
+  .btn.predict-btn:hover {
+    background: rgba(0,255,136,0.2);
+    box-shadow: 0 0 15px rgba(0,255,136,0.3);
+  }
+
+  #chartContainer {
+    position: relative;
+    height: 380px;
+    margin-top: 12px;
+  }
+  canvas { border-radius: 4px; }
+
+  /* PREDICTION ARROW OVERLAY */
+  #predictionOverlay {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    border-radius: 4px;
+  }
+
+  /* PREDICTION BAR */
+  .prediction-bar {
+    margin-top: 12px;
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 8px;
+  }
+  .pred-card {
+    background: rgba(0,0,0,0.3);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 12px;
+    text-align: center;
+    transition: all 0.3s;
+  }
+  .pred-card.bullish { border-color: var(--green); background: rgba(0,255,136,0.05); }
+  .pred-card.bearish { border-color: var(--red); background: rgba(255,59,107,0.05); }
+  .pred-card.neutral { border-color: var(--gold); background: rgba(255,204,0,0.05); }
+  .pred-card .label {
+    font-size: 0.7rem;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    opacity: 0.7;
+    font-family: 'Share Tech Mono', monospace;
+  }
+  .pred-card .value {
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 1.6rem;
+    font-weight: 700;
+    margin-top: 4px;
+  }
+  .pred-card.bullish .value { color: var(--green); }
+  .pred-card.bearish .value { color: var(--red); }
+  .pred-card.neutral .value { color: var(--gold); }
+  .pred-card .sub {
+    font-size: 0.75rem;
+    opacity: 0.6;
+    margin-top: 2px;
+  }
+
+  /* CONFIDENCE METER */
+  .confidence-section { margin-top: 14px; }
+  .conf-label {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.78rem;
+    margin-bottom: 6px;
+    font-family: 'Share Tech Mono', monospace;
+  }
+  .conf-bar-bg {
+    height: 8px;
+    background: rgba(255,255,255,0.05);
+    border-radius: 4px;
+    overflow: hidden;
+    border: 1px solid var(--border);
+  }
+  .conf-bar-fill {
+    height: 100%;
+    border-radius: 4px;
+    transition: width 1s ease, background 0.5s;
+    position: relative;
+  }
+  .conf-bar-fill::after {
+    content: '';
+    position: absolute;
+    right: 0; top: 0; bottom: 0;
+    width: 4px;
+    background: rgba(255,255,255,0.6);
+    border-radius: 2px;
+    box-shadow: 0 0 8px rgba(255,255,255,0.8);
+  }
+
+  /* PATTERN TAGS */
+  .pattern-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 10px;
+  }
+  .ptag {
+    padding: 3px 10px;
+    border-radius: 20px;
+    font-size: 0.72rem;
+    font-family: 'Share Tech Mono', monospace;
+    border: 1px solid;
+    transition: all 0.2s;
+  }
+  .ptag.bull { border-color: var(--green); color: var(--green); background: rgba(0,255,136,0.08); }
+  .ptag.bear { border-color: var(--red); color: var(--red); background: rgba(255,59,107,0.08); }
+  .ptag.neutral { border-color: var(--gold); color: var(--gold); background: rgba(255,204,0,0.08); }
+
+  /* RIGHT SIDEBAR */
+  .sidebar { grid-column: 2; grid-row: 1 / 3; display: flex; flex-direction: column; gap: 12px; }
+
+  /* AI SIGNAL */
+  .ai-signal {
+    text-align: center;
+    padding: 20px 14px;
+  }
+  .signal-ring {
+    width: 110px; height: 110px;
+    border-radius: 50%;
+    margin: 0 auto 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    transition: all 0.5s;
+  }
+  .signal-ring::before {
+    content: '';
+    position: absolute;
+    inset: -4px;
+    border-radius: 50%;
+    border: 2px solid transparent;
+    animation: spinBorder 3s linear infinite;
+  }
+  @keyframes spinBorder {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+  }
+  .signal-ring.BUY {
+    background: radial-gradient(circle, rgba(0,255,136,0.2), rgba(0,255,136,0.05));
+    border: 2px solid var(--green);
+    box-shadow: 0 0 30px rgba(0,255,136,0.3), inset 0 0 20px rgba(0,255,136,0.1);
+  }
+  .signal-ring.BUY::before { border-top-color: var(--green); }
+  .signal-ring.SELL {
+    background: radial-gradient(circle, rgba(255,59,107,0.2), rgba(255,59,107,0.05));
+    border: 2px solid var(--red);
+    box-shadow: 0 0 30px rgba(255,59,107,0.3), inset 0 0 20px rgba(255,59,107,0.1);
+  }
+  .signal-ring.SELL::before { border-top-color: var(--red); }
+  .signal-ring.WAIT {
+    background: radial-gradient(circle, rgba(255,204,0,0.15), rgba(255,204,0,0.03));
+    border: 2px solid var(--gold);
+    box-shadow: 0 0 30px rgba(255,204,0,0.2);
+  }
+  .signal-ring.WAIT::before { border-top-color: var(--gold); }
+  .signal-text {
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 1.5rem;
+    font-weight: 700;
+    letter-spacing: 3px;
+  }
+  .BUY .signal-text { color: var(--green); }
+  .SELL .signal-text { color: var(--red); }
+  .WAIT .signal-text { color: var(--gold); }
+  .signal-sub { font-size: 0.75rem; opacity: 0.6; margin-top: 4px; font-family: 'Share Tech Mono', monospace; }
+
+  .signal-details { margin-top: 14px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .sdet {
+    background: rgba(0,0,0,0.3);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 8px;
+    text-align: center;
+  }
+  .sdet .dlabel { font-size: 0.65rem; opacity: 0.5; text-transform: uppercase; letter-spacing: 1px; }
+  .sdet .dval { font-family: 'Rajdhani', sans-serif; font-size: 1rem; font-weight: 700; margin-top: 2px; }
+  .dval.g { color: var(--green); }
+  .dval.r { color: var(--red); }
+  .dval.a { color: var(--accent); }
+
+  /* NEWS FEED */
+  .news-feed { flex: 1; overflow: hidden; }
+  .news-list { max-height: 280px; overflow-y: auto; padding: 10px 14px; }
+  .news-list::-webkit-scrollbar { width: 4px; }
+  .news-list::-webkit-scrollbar-track { background: transparent; }
+  .news-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+  .news-item {
+    border-bottom: 1px solid var(--border);
+    padding: 10px 0;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .news-item:hover { padding-left: 6px; }
+  .news-item:last-child { border-bottom: none; }
+  .news-sentiment {
+    display: inline-block;
+    font-size: 0.65rem;
+    padding: 2px 7px;
+    border-radius: 10px;
+    margin-bottom: 4px;
+    font-family: 'Share Tech Mono', monospace;
+    letter-spacing: 1px;
+  }
+  .ns-bull { background: rgba(0,255,136,0.15); color: var(--green); border: 1px solid rgba(0,255,136,0.3); }
+  .ns-bear { background: rgba(255,59,107,0.15); color: var(--red); border: 1px solid rgba(255,59,107,0.3); }
+  .ns-neu { background: rgba(255,204,0,0.1); color: var(--gold); border: 1px solid rgba(255,204,0,0.3); }
+  .news-headline { font-size: 0.8rem; line-height: 1.4; color: #ccc; }
+  .news-meta { font-size: 0.68rem; opacity: 0.4; margin-top: 4px; font-family: 'Share Tech Mono', monospace; }
+
+  /* INDICATORS */
+  .indicators-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 12px 14px; }
+  .ind {
+    background: rgba(0,0,0,0.2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 8px 10px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .ind-name { font-size: 0.72rem; opacity: 0.7; font-family: 'Share Tech Mono', monospace; }
+  .ind-val { font-family: 'Rajdhani', sans-serif; font-size: 0.95rem; font-weight: 600; }
+
+  /* BOTTOM FULL-WIDTH ROW */
+  .bottom-row {
+    grid-column: 1;
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 12px;
+  }
+
+  /* SCROLLING TICKER */
+  .ticker-bar {
+    grid-column: 1 / -1;
+    background: rgba(0,212,255,0.05);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    overflow: hidden;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    margin: 0 14px;
+    position: relative;
+  }
+  .ticker-label {
+    background: var(--accent);
+    color: #000;
+    font-size: 0.7rem;
+    font-weight: 700;
+    padding: 4px 10px;
+    white-space: nowrap;
+    font-family: 'Share Tech Mono', monospace;
+    letter-spacing: 1px;
+    flex-shrink: 0;
+  }
+  .ticker-scroll { overflow: hidden; flex: 1; }
+  .ticker-inner {
+    display: flex;
+    gap: 40px;
+    white-space: nowrap;
+    animation: tickerMove 40s linear infinite;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.78rem;
+    padding: 0 20px;
+  }
+  @keyframes tickerMove { 0%{transform:translateX(0)} 100%{transform:translateX(-50%)} }
+  .tick-item { display: inline-flex; gap: 6px; }
+  .tick-item .tn { color: var(--text); }
+  .tick-item .tp { color: var(--green); }
+  .tick-item .tn2 { color: var(--red); }
+
+  /* PREDICTION PATH ANNOTATION */
+  .path-annotation {
+    display: none;
+    position: absolute;
+    background: rgba(8,15,30,0.95);
+    border: 1px solid var(--accent);
+    border-radius: 6px;
+    padding: 8px 12px;
+    font-size: 0.75rem;
+    font-family: 'Share Tech Mono', monospace;
+    pointer-events: none;
+    z-index: 10;
+    box-shadow: var(--glow);
+  }
+  .path-annotation.show { display: block; }
+
+  /* LOADING OVERLAY */
+  .loading {
+    display: none;
+    position: absolute;
+    inset: 0;
+    background: rgba(5,10,20,0.85);
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 12px;
+    z-index: 50;
+    border-radius: 4px;
+  }
+  .loading.show { display: flex; }
+  .spinner {
+    width: 40px; height: 40px;
+    border: 3px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .loading-text {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.8rem;
+    color: var(--accent);
+    animation: blink 1s infinite;
+  }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+  /* DISCLAIMER */
+  .disclaimer {
+    text-align: center;
+    padding: 12px;
+    font-size: 0.68rem;
+    color: var(--dim);
+    border-top: 1px solid var(--border);
+    margin-top: 8px;
+    font-family: 'Share Tech Mono', monospace;
+  }
+
+  /* RESPONSIVE */
+  @media(max-width: 1024px) {
+    .main-grid { grid-template-columns: 1fr; }
+    .sidebar { grid-column: 1; grid-row: auto; flex-direction: row; flex-wrap: wrap; }
+    .sidebar .panel { min-width: 280px; flex: 1; }
+    .bottom-row { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="wrapper">
+
+<!-- TICKER -->
+<div class="ticker-bar" style="margin: 8px 14px 0;">
+  <div class="ticker-label">⚡ LIVE</div>
+  <div class="ticker-scroll">
+    <div class="ticker-inner" id="tickerInner"></div>
+  </div>
+</div>
+
+<!-- HEADER -->
+<header>
+  <div class="logo">NIFTY<span>50</span> · AI PREDICTOR</div>
+  <div class="market-status">
+    <div class="status-dot" id="statusDot"></div>
+    <span id="marketStatusText"></span>
+    <span style="opacity:0.4">|</span>
+    <span id="currentTime" style="font-size:0.78rem; opacity:0.7;"></span>
+  </div>
+  <div class="header-right">
+    <div class="nifty-live">
+      NIFTY 50 &nbsp;<span class="val" id="niftyVal">--</span>
+      <span class="chg" id="niftyChg"></span>
+    </div>
+  </div>
+</header>
+
+<!-- MAIN GRID -->
+<div class="main-grid">
+
+  <!-- CHART SECTION -->
+  <div class="panel chart-section">
+    <div class="panel-header">
+      <span class="panel-title">📈 NIFTY 50 — AI PATTERN ANALYSIS</span>
+      <div class="chart-controls">
+        <button class="btn active" onclick="setTF(this,'1D')">1D</button>
+        <button class="btn" onclick="setTF(this,'1W')">1W</button>
+        <button class="btn" onclick="setTF(this,'1M')">1M</button>
+        <button class="btn" onclick="setTF(this,'3M')">3M</button>
+        <button class="btn predict-btn" onclick="runPrediction()">⚡ AI PREDICT</button>
+      </div>
+    </div>
+    <div class="panel-body">
+      <div id="chartContainer">
+        <canvas id="mainChart"></canvas>
+        <canvas id="predictionOverlay" style="position:absolute;inset:0;pointer-events:none;"></canvas>
+        <div class="loading" id="chartLoading">
+          <div class="spinner"></div>
+          <div class="loading-text">AI ANALYZING PATTERNS...</div>
+        </div>
+        <div class="path-annotation" id="pathAnnotation"></div>
+      </div>
+
+      <!-- PREDICTION CARDS -->
+      <div class="prediction-bar">
+        <div class="pred-card" id="cardDirection">
+          <div class="label">AI Direction</div>
+          <div class="value" id="dirVal">--</div>
+          <div class="sub" id="dirSub">Run prediction</div>
+        </div>
+        <div class="pred-card" id="cardTarget">
+          <div class="label">Target Zone</div>
+          <div class="value" id="targetVal">--</div>
+          <div class="sub" id="targetSub">Price target</div>
+        </div>
+        <div class="pred-card" id="cardStop">
+          <div class="label">Stop Loss</div>
+          <div class="value" id="stopVal">--</div>
+          <div class="sub" id="stopSub">Risk level</div>
+        </div>
+      </div>
+
+      <!-- CONFIDENCE -->
+      <div class="confidence-section">
+        <div class="conf-label">
+          <span style="color:var(--accent)">AI CONFIDENCE</span>
+          <span id="confPct" style="color:#fff; font-weight:700;">0%</span>
+        </div>
+        <div class="conf-bar-bg">
+          <div class="conf-bar-fill" id="confFill" style="width:0%; background: linear-gradient(90deg, #00d4ff, #00ff88);"></div>
+        </div>
+      </div>
+
+      <!-- PATTERN TAGS -->
+      <div class="pattern-tags" id="patternTags">
+        <span class="ptag neutral">Awaiting Analysis</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- SIDEBAR -->
+  <div class="sidebar">
+
+    <!-- AI SIGNAL -->
+    <div class="panel">
+      <div class="panel-header">
+        <span class="panel-title">🤖 AI SIGNAL</span>
+        <span style="font-size:0.7rem; color:var(--dim); font-family:'Share Tech Mono';" id="lastUpdated">--</span>
+      </div>
+      <div class="ai-signal">
+        <div class="signal-ring WAIT" id="signalRing">
+          <div>
+            <div class="signal-text" id="signalText">WAIT</div>
+            <div class="signal-sub" id="signalSub">No signal yet</div>
+          </div>
+        </div>
+        <div class="signal-details">
+          <div class="sdet">
+            <div class="dlabel">Entry</div>
+            <div class="dval a" id="sigEntry">--</div>
+          </div>
+          <div class="sdet">
+            <div class="dlabel">Target</div>
+            <div class="dval g" id="sigTarget">--</div>
+          </div>
+          <div class="sdet">
+            <div class="dlabel">Stop</div>
+            <div class="dval r" id="sigStop">--</div>
+          </div>
+          <div class="sdet">
+            <div class="dlabel">R:R Ratio</div>
+            <div class="dval a" id="sigRR">--</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- NEWS FEED -->
+    <div class="panel news-feed">
+      <div class="panel-header">
+        <span class="panel-title">📰 MARKET NEWS & SENTIMENT</span>
+        <button class="btn" onclick="refreshNews()" style="padding:3px 10px; font-size:0.7rem;">↻ REFRESH</button>
+      </div>
+      <div class="news-list" id="newsList"></div>
+    </div>
+
+    <!-- INDICATORS -->
+    <div class="panel">
+      <div class="panel-header">
+        <span class="panel-title">📊 TECHNICAL INDICATORS</span>
+      </div>
+      <div class="indicators-grid" id="indicatorsGrid"></div>
+    </div>
+
+  </div>
+
+  <!-- BOTTOM ROW -->
+  <div class="bottom-row">
+    <!-- SENTIMENT -->
+    <div class="panel">
+      <div class="panel-header"><span class="panel-title">🧠 MARKET SENTIMENT</span></div>
+      <div class="panel-body" style="padding:10px 14px;">
+        <div id="sentimentBars"></div>
+      </div>
+    </div>
+    <!-- PATTERN INFO -->
+    <div class="panel">
+      <div class="panel-header"><span class="panel-title">🔍 DETECTED PATTERNS</span></div>
+      <div class="panel-body" style="padding:10px 14px;" id="patternInfo">
+        <p style="opacity:0.4; font-size:0.8rem; font-family:'Share Tech Mono';">Run AI prediction to detect patterns</p>
+      </div>
+    </div>
+    <!-- FII/DII -->
+    <div class="panel">
+      <div class="panel-header"><span class="panel-title">💹 FII / DII ACTIVITY</span></div>
+      <div class="panel-body" id="fiiDii" style="padding:10px 14px;"></div>
+    </div>
+  </div>
+
+</div>
+
+<div class="disclaimer">
+  ⚠️ EDUCATIONAL PURPOSE ONLY — Not financial advice. AI predictions are simulated pattern analysis. Always consult a SEBI-registered advisor before trading.
+</div>
+
+</div>
+
+<script>
+// ===== NIFTY DATA ENGINE =====
+const BASE_PRICE = 22150;
+let currentPrice = BASE_PRICE;
+let priceHistory = [];
+let timeLabels = [];
+let tf = '1D';
+let predictionActive = false;
+let chart = null;
+let overlayCtx = null;
+
+// Generate realistic OHLC-like price data
+function generatePriceData(points, basePrice, volatility = 0.008) {
+  const data = [];
+  const labels = [];
+  let price = basePrice;
+  const now = new Date();
+  
+  for (let i = points; i >= 0; i--) {
+    const change = (Math.random() - 0.48) * volatility * price;
+    const trend = Math.sin(i * 0.15) * 0.002 * price; // add wave
+    price = Math.max(price + change + trend, price * 0.95);
+    data.push(parseFloat(price.toFixed(2)));
+    
+    const d = new Date(now);
+    if (tf === '1D') {
+      d.setMinutes(d.getMinutes() - i * 15);
+      labels.push(d.getHours().toString().padStart(2,'0') + ':' + d.getMinutes().toString().padStart(2,'0'));
+    } else if (tf === '1W') {
+      d.setDate(d.getDate() - Math.floor(i/2));
+      labels.push(d.toLocaleDateString('en-IN',{weekday:'short',day:'numeric'}));
+    } else {
+      d.setDate(d.getDate() - i);
+      labels.push(d.toLocaleDateString('en-IN',{month:'short',day:'numeric'}));
+    }
+  }
+  return { data, labels };
+}
+
+function getDataPointCount() {
+  return { '1D': 26, '1W': 35, '1M': 60, '3M': 90 }[tf] || 26;
+}
+
+function getVolatility() {
+  return { '1D': 0.004, '1W': 0.008, '1M': 0.012, '3M': 0.015 }[tf] || 0.004;
+}
+
+function initChart() {
+  const pts = getDataPointCount();
+  const { data, labels } = generatePriceData(pts, BASE_PRICE + (Math.random()-0.5)*500, getVolatility());
+  priceHistory = data;
+  timeLabels = labels;
+  currentPrice = data[data.length - 1];
+
+  const ctx = document.getElementById('mainChart').getContext('2d');
+  
+  if (chart) chart.destroy();
+
+  // Create gradient
+  const gradient = ctx.createLinearGradient(0, 0, 0, 380);
+  gradient.addColorStop(0, 'rgba(0,212,255,0.3)');
+  gradient.addColorStop(0.5, 'rgba(0,212,255,0.1)');
+  gradient.addColorStop(1, 'rgba(0,212,255,0)');
+
+  chart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        label: 'NIFTY 50',
+        data,
+        borderColor: '#00d4ff',
+        backgroundColor: gradient,
+        borderWidth: 2,
+        pointRadius: 0,
+        pointHoverRadius: 5,
+        pointHoverBackgroundColor: '#00d4ff',
+        tension: 0.3,
+        fill: true
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: { duration: 600, easing: 'easeInOutCubic' },
+      interaction: { intersect: false, mode: 'index' },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: 'rgba(8,15,30,0.95)',
+          borderColor: '#0d2040',
+          borderWidth: 1,
+          titleColor: '#00d4ff',
+          bodyColor: '#b0c8e8',
+          titleFont: { family: 'Share Tech Mono', size: 11 },
+          bodyFont: { family: 'Rajdhani', size: 14 },
+          callbacks: {
+            label: ctx => `₹ ${ctx.parsed.y.toLocaleString('en-IN', {minimumFractionDigits:2})}`
+          }
+        },
+        annotation: {}
+      },
+      scales: {
+        x: {
+          grid: { color: 'rgba(255,255,255,0.03)', drawBorder: false },
+          ticks: { color: '#3a5070', font: { family: 'Share Tech Mono', size: 10 }, maxTicksLimit: 8 },
+          border: { display: false }
+        },
+        y: {
+          position: 'right',
+          grid: { color: 'rgba(255,255,255,0.04)', drawBorder: false },
+          ticks: { color: '#3a5070', font: { family: 'Share Tech Mono', size: 10 }, callback: v => '₹'+v.toLocaleString('en-IN') },
+          border: { display: false }
+        }
+      }
+    }
+  });
+
+  updateNiftyHeader();
+}
+
+// ===== PREDICTION ENGINE =====
+const PATTERNS = [
+  { name: 'Double Bottom', type: 'bull', signal: 'BUY', strength: 85, desc: 'W-shape reversal at support — strong upward breakout expected' },
+  { name: 'Bull Flag', type: 'bull', signal: 'BUY', strength: 78, desc: 'Consolidation after sharp rally — continuation expected' },
+  { name: 'Cup & Handle', type: 'bull', signal: 'BUY', strength: 82, desc: 'Rounded bottom with handle — breakout above resistance' },
+  { name: 'Ascending Triangle', type: 'bull', signal: 'BUY', strength: 74, desc: 'Higher lows with flat resistance — bullish breakout likely' },
+  { name: 'Inverse H&S', type: 'bull', signal: 'BUY', strength: 88, desc: 'Classic reversal pattern — neckline breakout in progress' },
+  { name: 'Head & Shoulders', type: 'bear', signal: 'SELL', strength: 80, desc: 'Bearish reversal — neckline break below support zone' },
+  { name: 'Double Top', type: 'bear', signal: 'SELL', strength: 76, desc: 'M-shape at resistance — distribution phase detected' },
+  { name: 'Bear Flag', type: 'bear', signal: 'SELL', strength: 72, desc: 'Consolidation in downtrend — breakdown continuation' },
+  { name: 'Descending Triangle', type: 'bear', signal: 'SELL', strength: 70, desc: 'Lower highs with flat support — breakdown imminent' },
+  { name: 'Evening Star', type: 'bear', signal: 'SELL', strength: 75, desc: 'Bearish reversal candle at resistance — selling pressure' },
+  { name: 'Doji + Range', type: 'neutral', signal: 'WAIT', strength: 55, desc: 'Market indecision — wait for directional breakout' },
+  { name: 'Symmetrical Triangle', type: 'neutral', signal: 'WAIT', strength: 60, desc: 'Coiling price action — breakout direction unclear' },
+];
+
+const INDICATORS_MOCK = [
+  { name: 'RSI(14)', getValue: () => (Math.random()*60+20).toFixed(1), threshold: v => parseFloat(v)>70?'r':parseFloat(v)<30?'g':'a' },
+  { name: 'MACD', getValue: () => (Math.random()*40-20).toFixed(2), threshold: v => parseFloat(v)>0?'g':'r' },
+  { name: 'EMA 20', getValue: () => (currentPrice*(0.97+Math.random()*0.06)).toFixed(0), threshold: v => parseFloat(v)<currentPrice?'g':'r' },
+  { name: 'EMA 50', getValue: () => (currentPrice*(0.94+Math.random()*0.06)).toFixed(0), threshold: v => parseFloat(v)<currentPrice?'g':'r' },
+  { name: 'BB Width', getValue: () => (Math.random()*3+0.5).toFixed(2)+'%', threshold: ()=>'a' },
+  { name: 'ATR(14)', getValue: () => (Math.random()*150+80).toFixed(0), threshold: ()=>'a' },
+  { name: 'Volume', getValue: () => (Math.random()*2+0.5).toFixed(1)+'B', threshold: v => parseFloat(v)>1.5?'g':'a' },
+  { name: 'VIX', getValue: () => (Math.random()*15+10).toFixed(1), threshold: v => parseFloat(v)>20?'r':parseFloat(v)<15?'g':'a' },
+];
+
+async function runPrediction() {
+  if (predictionActive) return;
+  predictionActive = true;
+  
+  const loading = document.getElementById('chartLoading');
+  loading.classList.add('show');
+
+  await delay(1800);
+
+  // Pick pattern
+  const pattern = PATTERNS[Math.floor(Math.random() * PATTERNS.length)];
+  const confidence = pattern.strength + Math.floor(Math.random()*12) - 5;
+  const clampedConf = Math.min(95, Math.max(50, confidence));
+  
+  // Calculate targets
+  const isUp = pattern.signal === 'BUY';
+  const isSell = pattern.signal === 'SELL';
+  const cp = currentPrice;
+  const targetMult = isUp ? (1 + 0.008 + Math.random()*0.015) : isSell ? (1 - 0.008 - Math.random()*0.015) : 1;
+  const stopMult = isUp ? (1 - 0.005 - Math.random()*0.008) : isSell ? (1 + 0.005 + Math.random()*0.008) : 1;
+  const target = (cp * targetMult).toFixed(2);
+  const stop = (cp * stopMult).toFixed(2);
+  const rrRatio = Math.abs(target - cp) / Math.abs(cp - stop);
+
+  loading.classList.remove('show');
+
+  // Update UI
+  updatePredictionUI(pattern, clampedConf, cp, target, stop, rrRatio);
+  drawPredictionPath(pattern, cp, parseFloat(target));
+  updateIndicators();
+  updatePatternInfo(pattern, clampedConf);
+
+  predictionActive = false;
+}
+
+function updatePredictionUI(pattern, conf, cp, target, stop, rr) {
+  // Direction card
+  const dcard = document.getElementById('cardDirection');
+  const dirVal = document.getElementById('dirVal');
+  const dirSub = document.getElementById('dirSub');
+  dcard.className = 'pred-card ' + (pattern.signal==='BUY'?'bullish':pattern.signal==='SELL'?'bearish':'neutral');
+  dirVal.textContent = pattern.signal;
+  dirSub.textContent = pattern.name;
+
+  // Target card
+  document.getElementById('cardTarget').className = 'pred-card ' + (pattern.signal==='BUY'?'bullish':'bearish');
+  document.getElementById('targetVal').textContent = '₹'+parseFloat(target).toLocaleString('en-IN');
+  document.getElementById('targetSub').textContent = '+' + (((target-cp)/cp)*100).toFixed(2)+'%';
+
+  // Stop card
+  document.getElementById('cardStop').className = 'pred-card bearish';
+  document.getElementById('stopVal').textContent = '₹'+parseFloat(stop).toLocaleString('en-IN');
+  document.getElementById('stopSub').textContent = (((stop-cp)/cp)*100).toFixed(2)+'%';
+
+  // Confidence
+  const fill = document.getElementById('confFill');
+  const pct = document.getElementById('confPct');
+  pct.textContent = conf + '%';
+  fill.style.width = conf + '%';
+  fill.style.background = conf > 75
+    ? 'linear-gradient(90deg, #00d4ff, #00ff88)'
+    : conf > 60
+    ? 'linear-gradient(90deg, #00d4ff, #ffcc00)'
+    : 'linear-gradient(90deg, #00d4ff, #ff3b6b)';
+
+  // Signal ring
+  const ring = document.getElementById('signalRing');
+  ring.className = 'signal-ring ' + pattern.signal;
+  document.getElementById('signalText').textContent = pattern.signal;
+  document.getElementById('signalSub').textContent = conf + '% confidence';
+  document.getElementById('sigEntry').textContent = '₹' + cp.toLocaleString('en-IN');
+  document.getElementById('sigTarget').textContent = '₹' + parseFloat(target).toLocaleString('en-IN');
+  document.getElementById('sigStop').textContent = '₹' + parseFloat(stop).toLocaleString('en-IN');
+  document.getElementById('sigRR').textContent = rr.toFixed(2) + ':1';
+  document.getElementById('lastUpdated').textContent = 'Updated ' + new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'});
+
+  // Pattern tags
+  const tags = document.getElementById('patternTags');
+  const extraTags = pattern.signal === 'BUY'
+    ? ['Above EMA20', 'RSI Bullish', 'Volume ↑']
+    : pattern.signal === 'SELL'
+    ? ['Below EMA20', 'RSI Bearish', 'Volume ↓']
+    : ['Tight Range', 'Low Volume', 'Consolidation'];
+  tags.innerHTML = `
+    <span class="ptag ${pattern.type}">${pattern.name}</span>
+    ${extraTags.map(t => `<span class="ptag ${pattern.type}">${t}</span>`).join('')}
+    <span class="ptag neutral">${conf}% Confidence</span>
+  `;
+}
+
+function drawPredictionPath(pattern, cp, target) {
+  const canvas = document.getElementById('predictionOverlay');
+  if (!chart) return;
+  canvas.width = chart.canvas.width;
+  canvas.height = chart.canvas.height;
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  const meta = chart.getDatasetMeta(0);
+  const lastPoint = meta.data[meta.data.length - 1];
+  if (!lastPoint) return;
+
+  const chartArea = chart.chartArea;
+  const yMin = chart.scales.y.min;
+  const yMax = chart.scales.y.max;
+  const yRange = yMax - yMin;
+
+  const startX = lastPoint.x;
+  const startY = lastPoint.y;
+  const targetY = chartArea.top + ((yMax - target) / yRange) * (chartArea.bottom - chartArea.top);
+  const endX = chartArea.right - 10;
+
+  const isUp = pattern.signal === 'BUY';
+  const isSell = pattern.signal === 'SELL';
+
+  // Draw prediction path
+  ctx.save();
+  ctx.setLineDash([6, 4]);
+  ctx.lineWidth = 2.5;
+
+  const grad = ctx.createLinearGradient(startX, startY, endX, targetY);
+  grad.addColorStop(0, isUp ? '#00ff88' : isSell ? '#ff3b6b' : '#ffcc00');
+  grad.addColorStop(1, isUp ? '#00ff8888' : isSell ? '#ff3b6b88' : '#ffcc0088');
+  ctx.strokeStyle = grad;
+
+  ctx.beginPath();
+  ctx.moveTo(startX, startY);
+  // Slight curve
+  const cpX = startX + (endX - startX) * 0.4;
+  const cpY = startY + (targetY - startY) * 0.6;
+  ctx.bezierCurveTo(cpX, startY, cpX, cpY, endX, targetY);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Arrow at end
+  const angle = Math.atan2(targetY - cpY, endX - cpX);
+  ctx.fillStyle = isUp ? '#00ff88' : isSell ? '#ff3b6b' : '#ffcc00';
+  ctx.beginPath();
+  ctx.moveTo(endX, targetY);
+  ctx.lineTo(endX - 12 * Math.cos(angle - 0.4), targetY - 12 * Math.sin(angle - 0.4));
+  ctx.lineTo(endX - 12 * Math.cos(angle + 0.4), targetY - 12 * Math.sin(angle + 0.4));
+  ctx.closePath();
+  ctx.fill();
+
+  // Target line
+  ctx.setLineDash([3, 5]);
+  ctx.strokeStyle = isUp ? 'rgba(0,255,136,0.4)' : isSell ? 'rgba(255,59,107,0.4)' : 'rgba(255,204,0,0.4)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(chartArea.left, targetY);
+  ctx.lineTo(endX, targetY);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Target label
+  ctx.fillStyle = isUp ? '#00ff88' : isSell ? '#ff3b6b' : '#ffcc00';
+  ctx.font = 'bold 11px Share Tech Mono';
+  ctx.fillText('TARGET ₹' + target.toLocaleString('en-IN'), chartArea.left + 5, targetY - 5);
+
+  // Glow circle at start
+  const grd = ctx.createRadialGradient(startX, startY, 0, startX, startY, 15);
+  grd.addColorStop(0, isUp ? 'rgba(0,255,136,0.6)' : isSell ? 'rgba(255,59,107,0.6)' : 'rgba(255,204,0,0.6)');
+  grd.addColorStop(1, 'transparent');
+  ctx.fillStyle = grd;
+  ctx.beginPath();
+  ctx.arc(startX, startY, 15, 0, Math.PI*2);
+  ctx.fill();
+
+  ctx.restore();
+
+  // Show annotation
+  const ann = document.getElementById('pathAnnotation');
+  ann.className = 'path-annotation show';
+  ann.style.left = (startX + 15) + 'px';
+  ann.style.top = (startY - 30) + 'px';
+  ann.innerHTML = `<span style="color:${isUp?'var(--green)':isSell?'var(--red)':'var(--gold)'}">◆ ${pattern.name}</span><br><span style="opacity:0.7">${pattern.desc.substring(0,40)}...</span>`;
+}
+
+function updatePatternInfo(pattern, conf) {
+  document.getElementById('patternInfo').innerHTML = `
+    <div style="margin-bottom:10px;">
+      <div style="font-family:'Rajdhani';font-size:1.1rem;font-weight:700;color:${pattern.type==='bull'?'var(--green)':pattern.type==='bear'?'var(--red)':'var(--gold)'}">
+        ${pattern.name}
+      </div>
+      <div style="font-size:0.78rem;opacity:0.7;margin-top:4px;line-height:1.5;">${pattern.desc}</div>
+    </div>
+    <div style="font-size:0.75rem;font-family:'Share Tech Mono';">
+      <div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--border);">
+        <span style="opacity:0.5">Signal Strength</span>
+        <span style="color:var(--accent)">${conf}%</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--border);">
+        <span style="opacity:0.5">Pattern Type</span>
+        <span style="color:${pattern.type==='bull'?'var(--green)':pattern.type==='bear'?'var(--red)':'var(--gold)'}">${pattern.type.toUpperCase()}</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;padding:4px 0;">
+        <span style="opacity:0.5">Timeframe</span>
+        <span style="color:var(--text)">${tf}</span>
+      </div>
+    </div>
+  `;
+}
+
+function updateIndicators() {
+  const grid = document.getElementById('indicatorsGrid');
+  grid.innerHTML = INDICATORS_MOCK.map(ind => {
+    const val = ind.getValue();
+    const cls = ind.threshold(val);
+    const color = cls==='g'?'var(--green)':cls==='r'?'var(--red)':'var(--accent)';
+    return `<div class="ind">
+      <span class="ind-name">${ind.name}</span>
+      <span class="ind-val" style="color:${color}">${val}</span>
+    </div>`;
+  }).join('');
+}
+
+// ===== NEWS ENGINE =====
+const NEWS_ITEMS = [
+  { h: 'RBI keeps repo rate unchanged at 6.5% — markets react positively', s: 'bull', src: 'Economic Times', ago: '2h' },
+  { h: 'FII inflows surge ₹4,200 Cr in single session — IT stocks rally', s: 'bull', src: 'Moneycontrol', ago: '3h' },
+  { h: 'Nifty IT index hits new 52-week high on strong Q3 earnings', s: 'bull', src: 'NSE India', ago: '4h' },
+  { h: 'US Fed signals pause in rate hikes — global markets cheer', s: 'bull', src: 'Reuters', ago: '5h' },
+  { h: 'Oil prices spike 3% — auto and aviation stocks under pressure', s: 'bear', src: 'CNBC TV18', ago: '6h' },
+  { h: 'SEBI tightens F&O rules — derivatives volume drops significantly', s: 'bear', src: 'Business Standard', ago: '7h' },
+  { h: 'INR weakens to 83.4 vs USD — import-heavy sectors bleed', s: 'bear', src: 'Financial Express', ago: '8h' },
+  { h: 'Adani Group stocks volatile amid short-seller report resurfacing', s: 'bear', src: 'Bloomberg', ago: '9h' },
+  { h: 'India manufacturing PMI at 57.5 — economy remains resilient', s: 'neu', src: 'PIB India', ago: '10h' },
+  { h: 'Budget expectations: Analysts predict infra boost, mixed market reaction', s: 'neu', src: 'Mint', ago: '12h' },
+  { h: 'Banking sector Q3 results beat estimates — NPAs at decade low', s: 'bull', src: 'Zee Business', ago: '14h' },
+  { h: 'Global recession fears ease — EM funds see renewed inflows', s: 'bull', src: 'NDTV Profit', ago: '16h' },
+];
+
+function renderNews() {
+  const shuffled = [...NEWS_ITEMS].sort(() => Math.random() - 0.5);
+  const nl = document.getElementById('newsList');
+  nl.innerHTML = shuffled.slice(0, 8).map(n => `
+    <div class="news-item">
+      <span class="news-sentiment ${n.s==='bull'?'ns-bull':n.s==='bear'?'ns-bear':'ns-neu'}">
+        ${n.s==='bull'?'📈 BULLISH':n.s==='bear'?'📉 BEARISH':'⚖️ NEUTRAL'}
+      </span>
+      <div class="news-headline">${n.h}</div>
+      <div class="news-meta">${n.src} · ${n.ago} ago</div>
+    </div>
+  `).join('');
+}
+
+function refreshNews() {
+  const nl = document.getElementById('newsList');
+  nl.style.opacity = '0.3';
+  setTimeout(() => { renderNews(); nl.style.opacity = '1'; }, 400);
+}
+
+// ===== SENTIMENT BARS =====
+function renderSentiment() {
+  const bullPct = 45 + Math.floor(Math.random() * 30);
+  const bearPct = 100 - bullPct - Math.floor(Math.random()*15);
+  const neuPct = 100 - bullPct - bearPct;
+  document.getElementById('sentimentBars').innerHTML = `
+    ${sentBar('BULLS', bullPct, 'var(--green)')}
+    ${sentBar('BEARS', bearPct, 'var(--red)')}
+    ${sentBar('NEUTRAL', neuPct, 'var(--gold)')}
+    <div style="font-size:0.7rem;opacity:0.4;font-family:'Share Tech Mono';margin-top:10px;text-align:center;">
+      Based on ${(Math.floor(Math.random()*500)+200)} analyst signals
+    </div>
+  `;
+}
+
+function sentBar(label, pct, color) {
+  return `
+    <div style="margin-bottom:10px;">
+      <div style="display:flex;justify-content:space-between;font-size:0.72rem;font-family:'Share Tech Mono';margin-bottom:4px;">
+        <span style="color:${color}">${label}</span><span>${pct}%</span>
+      </div>
+      <div style="height:6px;background:rgba(255,255,255,0.05);border-radius:3px;border:1px solid rgba(255,255,255,0.05);">
+        <div style="width:${pct}%;height:100%;background:${color};border-radius:3px;box-shadow:0 0 6px ${color};"></div>
+      </div>
+    </div>`;
+}
+
+// ===== FII / DII =====
+function renderFiiDii() {
+  const fiiBuy = (Math.random()*5000+1000).toFixed(0);
+  const fiiSell = (Math.random()*4000+500).toFixed(0);
+  const fiiNet = fiiBuy - fiiSell;
+  const diiBuy = (Math.random()*4000+800).toFixed(0);
+  const diiSell = (Math.random()*3000+400).toFixed(0);
+  const diiNet = diiBuy - diiSell;
+
+  document.getElementById('fiiDii').innerHTML = `
+    <div style="font-family:'Share Tech Mono';font-size:0.78rem;">
+      <div style="margin-bottom:12px;">
+        <div style="color:var(--accent);font-size:0.7rem;letter-spacing:2px;margin-bottom:6px;">FII ACTIVITY</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;text-align:center;">
+          <div style="background:rgba(0,255,136,0.08);border:1px solid rgba(0,255,136,0.2);border-radius:4px;padding:6px;">
+            <div style="opacity:0.5;font-size:0.65rem;">BUY</div>
+            <div style="color:var(--green);">₹${parseInt(fiiBuy).toLocaleString()}</div>
+          </div>
+          <div style="background:rgba(255,59,107,0.08);border:1px solid rgba(255,59,107,0.2);border-radius:4px;padding:6px;">
+            <div style="opacity:0.5;font-size:0.65rem;">SELL</div>
+            <div style="color:var(--red);">₹${parseInt(fiiSell).toLocaleString()}</div>
+          </div>
+          <div style="background:rgba(0,0,0,0.3);border:1px solid var(--border);border-radius:4px;padding:6px;">
+            <div style="opacity:0.5;font-size:0.65rem;">NET</div>
+            <div style="color:${fiiNet>0?'var(--green)':'var(--red)'};">${fiiNet>0?'+':''}${parseInt(fiiNet).toLocaleString()}</div>
+          </div>
+        </div>
+      </div>
+      <div>
+        <div style="color:var(--gold);font-size:0.7rem;letter-spacing:2px;margin-bottom:6px;">DII ACTIVITY</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;text-align:center;">
+          <div style="background:rgba(0,255,136,0.08);border:1px solid rgba(0,255,136,0.2);border-radius:4px;padding:6px;">
+            <div style="opacity:0.5;font-size:0.65rem;">BUY</div>
+            <div style="color:var(--green);">₹${parseInt(diiBuy).toLocaleString()}</div>
+          </div>
+          <div style="background:rgba(255,59,107,0.08);border:1px solid rgba(255,59,107,0.2);border-radius:4px;padding:6px;">
+            <div style="opacity:0.5;font-size:0.65rem;">SELL</div>
+            <div style="color:var(--red);">₹${parseInt(diiSell).toLocaleString()}</div>
+          </div>
+          <div style="background:rgba(0,0,0,0.3);border:1px solid var(--border);border-radius:4px;padding:6px;">
+            <div style="opacity:0.5;font-size:0.65rem;">NET</div>
+            <div style="color:${diiNet>0?'var(--green)':'var(--red)'};">${diiNet>0?'+':''}${parseInt(diiNet).toLocaleString()}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+// ===== TICKER =====
+const NIFTY50_STOCKS = [
+  ['RELIANCE','2456.80','▲'], ['TCS','3890.25','▲'], ['HDFC BANK','1623.40','▼'],
+  ['INFOSYS','1456.90','▲'], ['ICICI BANK','978.35','▲'], ['L&T','3234.10','▼'],
+  ['SBI','612.80','▲'], ['BHARTI','1123.55','▲'], ['SUNPHARMA','1456.00','▼'],
+  ['ITC','452.30','▲'], ['WIPRO','512.70','▼'], ['HCL TECH','1654.20','▲'],
+  ['TITAN','3456.80','▲'], ['KOTAK BANK','1823.10','▼'], ['AXIS BANK','1023.40','▲'],
+  ['BAJAJ FIN','6789.50','▲'], ['MARUTI','10234.80','▼'], ['NTPC','312.40','▲'],
+  ['ULTRACEM','8934.20','▲'], ['NESTLÉ','24356.00','▼']
+];
+
+function renderTicker() {
+  const items = NIFTY50_STOCKS.map(([n,p,d]) => {
+    const isUp = d==='▲';
+    const chg = ((Math.random()*3-1.2)).toFixed(2);
+    return `<span class="tick-item"><span class="tn">${n}</span> <span class="${isUp?'tp':'tn2'}">${d}${p} (${chg>0?'+':''}${chg}%)</span></span>`;
+  });
+  const doubled = [...items, ...items].join('');
+  document.getElementById('tickerInner').innerHTML = doubled;
+}
+
+// ===== MARKET STATUS =====
+function updateMarketStatus() {
+  const now = new Date();
+  const ist = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
+  const h = ist.getHours(), m = ist.getMinutes(), d = ist.getDay();
+  const timeStr = ist.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
+  document.getElementById('currentTime').textContent = 'IST ' + timeStr;
+
+  const isWeekday = d >= 1 && d <= 5;
+  const isOpen = isWeekday && (h > 9 || (h === 9 && m >= 15)) && h < 15 || (h === 15 && m <= 30);
+  const dot = document.getElementById('statusDot');
+  const text = document.getElementById('marketStatusText');
+  dot.className = 'status-dot ' + (isOpen ? 'open' : 'closed');
+  text.textContent = isOpen ? 'MARKET OPEN' : 'MARKET CLOSED';
+  text.style.color = isOpen ? 'var(--green)' : 'var(--red)';
+}
+
+function updateNiftyHeader() {
+  const chg = ((Math.random() * 2.5) - 1.2);
+  const pts = (currentPrice * chg / 100).toFixed(2);
+  document.getElementById('niftyVal').textContent = '₹' + currentPrice.toFixed(2);
+  const chgEl = document.getElementById('niftyChg');
+  chgEl.textContent = (chg >= 0 ? '+' : '') + chg.toFixed(2) + '% (' + (pts >= 0 ? '+' : '') + pts + ')';
+  chgEl.className = 'chg ' + (chg >= 0 ? 'pos' : 'neg');
+}
+
+// ===== HELPERS =====
+function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+function setTF(btn, newTf) {
+  tf = newTf;
+  document.querySelectorAll('.btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  // Clear prediction overlay
+  const canvas = document.getElementById('predictionOverlay');
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  document.getElementById('pathAnnotation').className = 'path-annotation';
+  initChart();
+  updateIndicators();
+}
+
+// ===== INIT =====
+updateMarketStatus();
+renderTicker();
+renderNews();
+renderSentiment();
+renderFiiDii();
+updateIndicators();
+
+// Slight delay to let DOM settle
+setTimeout(() => {
+  initChart();
+}, 100);
+
+// Live updates
+setInterval(updateMarketStatus, 1000);
+setInterval(() => {
+  // Simulate live price tick
+  if (chart && priceHistory.length > 0) {
+    const change = (Math.random() - 0.49) * 30;
+    const newPrice = Math.max(20000, currentPrice + change);
+    currentPrice = parseFloat(newPrice.toFixed(2));
+    priceHistory.push(currentPrice);
+    priceHistory.shift();
+    chart.data.datasets[0].data = priceHistory;
+    chart.update('none');
+    updateNiftyHeader();
+  }
+}, 3000);
+
+setInterval(renderSentiment, 30000);
+setInterval(renderFiiDii, 60000);
+</script>
+</body>
+</html>
